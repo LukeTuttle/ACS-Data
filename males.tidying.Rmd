@@ -1,0 +1,82 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+
+```{r setup}
+library(tidyverse)
+library(scales)
+```
+
+
+NOTES: 
+In the race column:
+1. "genpop" means that it is just the overall male 18-24 population, irrespective of race. 
+2. "two or more races" - You didn't ask for this race group but it was easy enough to include just incase you wanted it. 
+```{r}
+load("acs.males.18to24.rds")
+
+males <- as_tibble(rownames_to_column(acs.males.18to24))
+
+#I didn't actaully end up needing all the columns present in the "acs.males.18to24.rds. Therefore I used a regex to remove some of the eroneous columns to I could do a group_by %>% summarize %>% sum with greater ease down the line (or down the markdown rather hehe)
+males <- males %>%
+  rename(state = rowname) %>% 
+  rename_all(
+    .funs = "str_remove_all", 
+    pattern = "Sex.by.Age|SEX.BY.AGE|\\.\\.")
+males <- males %>% select(
+  str_subset(colnames(males), 
+             pattern = "state|(^Total)|^Male\\.|[:digit:]"))
+
+males <- males %>% rename(
+  total_pop = Total., 
+  total_m_pop = Male.)
+
+males <- males %>% gather(
+  key = "demographic", 
+  value = "estimate", 
+  -c("state", "total_pop", "total_m_pop")) 
+```
+
+```{r}
+males <- males %>% 
+  mutate(
+    race = case_when(
+      str_detect(males$demographic, 
+                 pattern = "(?<!NOT.)HISPANIC") == TRUE ~ "Hispanic",
+      str_detect(males$demographic, 
+                 pattern = "WHITE.*NOT.*HISPANIC") == TRUE ~ "White_Non_Hispanic",
+      str_detect(males$demographic, 
+                 pattern = "WHITE(?!.*NOT.*HISPANIC)") == TRUE ~ "White",
+      str_detect(males$demographic, 
+                 pattern = "ASIAN") == TRUE ~ "Asian",
+      str_detect(males$demographic, 
+                 pattern = "BLACK") == TRUE ~ "Black",
+      str_detect(males$demographic, 
+                 pattern = "TWO") == TRUE ~ "Two_Or_More_Races",
+      TRUE ~ "Gen_Pop"
+      
+      
+    )
+    
+  )  
+  
+```
+
+```{r create_mutate_proportion}
+males <- males %>% mutate(
+  prop_of_total = estimate/total_pop,
+  prop_of_men = estimate/total_m_pop)
+
+males %>% 
+  group_by(
+    state, race) %>% 
+  summarise(
+   prop_to_gen_pop = percent(sum(prop_of_total))) 
+
+#Now all you need to do is assign the pipe chain above and export, or continue below. 
+
+```
+
